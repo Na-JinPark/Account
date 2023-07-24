@@ -16,6 +16,8 @@ import javax.transaction.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 import static com.example.account.type.AccountStatus.*;
@@ -33,15 +35,15 @@ public class AccountService {
      */
     @Transactional
     public AccountDto createAccount(Long userId, Long initialBalance) {
-        AccountUser accountUser =  accountUserRepository.findById(userId)
-                .orElseThrow(()->new AccountException(USER_NOT_FOUND));
+        AccountUser accountUser = getAccountUser(userId);
 
         validateCreateAccount(accountUser);
 
-        String newAccountNumber = accountRepository.findFirstByOrderByIdDesc()
-                .map(account -> (Integer.parseInt(account.getAccountNumber())) + 1 + "")//계좌가 있을 경우 가져온 계좌번호에 + 1
-                .orElse(("1000000000")); //아직 계좌가 없을 경우
+        String newAccountNumber = String.valueOf(ThreadLocalRandom.current().nextLong(1000000000L, 10000000000L));
 
+        while (accountRepository.existsByAccountNumber(newAccountNumber)) {
+            newAccountNumber = String.valueOf(ThreadLocalRandom.current().nextLong(1000000000L, 10000000000L));
+        }
 
         return AccountDto.fromEntity(
                 accountRepository.save(Account.builder()
@@ -70,8 +72,7 @@ public class AccountService {
 
     @Transactional
     public AccountDto deleteAccount(Long userId, String accountNumber) {
-        AccountUser accountUser =  accountUserRepository.findById(userId)
-                .orElseThrow(()->new AccountException(USER_NOT_FOUND));
+        AccountUser accountUser = getAccountUser(userId);
 
         Account account = accountRepository.findByAccountNumber(accountNumber)
                 .orElseThrow(()->new AccountException(ACCOUNT_NOT_FOUND));
@@ -99,8 +100,7 @@ public class AccountService {
     }
     @Transactional
     public List<AccountDto> getAccountByUserId(Long userId) {
-        AccountUser accountUser = accountUserRepository.findById(userId)
-                .orElseThrow(() -> new AccountException(USER_NOT_FOUND));
+        AccountUser accountUser = getAccountUser(userId);
 
         List<Account> accounts = accountRepository
                 .findByAccountUser(accountUser);
@@ -108,5 +108,11 @@ public class AccountService {
         return accounts.stream()
                 .map(AccountDto::fromEntity)
                 .collect((Collectors.toList()));
+    }
+
+    private AccountUser getAccountUser(Long userId) {
+        AccountUser accountUser = accountUserRepository.findById(userId)
+                .orElseThrow(() -> new AccountException(USER_NOT_FOUND));
+        return accountUser;
     }
 }
